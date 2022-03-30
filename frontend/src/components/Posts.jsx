@@ -1,9 +1,6 @@
 import React from 'react';
-// import { randLine, randNumber, randPastDate } from '@ngneat/falso';
 import update from 'immutability-helper';
-import axios from 'axios';
-
-const API_URL = 'http://127.0.0.1:8000';
+import PostService from '../postService';
 
 // let generatedPosts = [];
 // for (let index = 1; index < randNumber({ max: 51 }); index++) {
@@ -14,7 +11,7 @@ const API_URL = 'http://127.0.0.1:8000';
 //         date: randPastDate().toLocaleString(),
 //     });
 // }
-
+const postService = new PostService();
 export default class Posts extends React.Component {
     constructor(props) {
         super(props);
@@ -24,8 +21,12 @@ export default class Posts extends React.Component {
         };
     }
     getData = () => {
-        axios.get(`${API_URL}/api/posts`).then((response) => {
-            this.setState({ data: response.data.data });
+        postService.getPosts().then((data) => {
+            if (data.length > 0) {
+                this.setState({ data });
+            } else {
+                console.log('ERROR getData!', data);
+            }
         });
     };
     handleChange = (event) => {
@@ -34,9 +35,13 @@ export default class Posts extends React.Component {
     handleSubmit = () => {
         const text = this.state.inputValue;
         this.setState({ inputValue: '' });
-        axios.post(`${API_URL}/api/posts`, { text: text }).then((response) => {
-            console.log(response.status);
-            this.getData();
+        postService.createPost(text).then((status) => {
+            if (status === 200) {
+                console.log('Post was saved in DB');
+                this.getData();
+            } else {
+                console.log('ERROR handleSubmit!', status);
+            }
         });
     };
     setLike = (post) => {
@@ -44,7 +49,25 @@ export default class Posts extends React.Component {
         // How to use update() feature https://github.com/kolodny/immutability-helper
         const newState = update(this.state, { data: { [index]: { likesCount: { $set: post.likesCount + 1 } } } });
         this.setState(newState);
-        axios.get(`${API_URL}/api/like_post/${post.id}`).then((response) => console.log('Лайк удачно сохранен в базу данных. Новое количество лайков:', response.data));
+        postService.addLikeToPost(post.id).then((newLikesCount) => {
+            if (newLikesCount === this.state.data[index].likesCount) {
+                console.log('Лайк удачно сохранен в базу данных. Новое количество лайков: ', newLikesCount);
+            } else {
+                console.log('ERROR setLike!', newLikesCount);
+            }
+        });
+    };
+    deletePost = (post) => {
+        postService.deletePost(post.id).then((status) => {
+            if (status === 200) {
+                const index = this.state.data.indexOf(post);
+                const newState = update(this.state, { data: { $splice: [[index, 1]] } });
+                this.setState(newState);
+                console.log(`Post ${post.text} was successfully deleted`);
+            } else {
+                console.log('ERROR deletePost!', status);
+            }
+        });
     };
     componentDidMount() {
         console.log('Did Mount!');
@@ -58,6 +81,7 @@ export default class Posts extends React.Component {
                           <div key={post.id} className={`post post-${post.id}`}>
                               <p> {post.text} </p>
                               <button onClick={() => this.setLike(post)}> {post.likesCount}</button>
+                              <button onClick={() => this.deletePost(post)}>Delete</button>
                               <p> Date: {post.date}</p>
                               <hr />
                           </div>
